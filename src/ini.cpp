@@ -20,6 +20,7 @@ using namespace std;
 #define GENERIC_ERROR 255;
 #define MAX_MMAP_LENGTH 1024 * 1024 * 250
 
+string file;
 std::string trim(const std::string &line)
 {
     const char *WhiteSpace = " \t\v\r\n";
@@ -36,12 +37,13 @@ unsigned short Ini::load_resurce(const std::string &path)
     filename = path.c_str();
     const size_t file_size = 4096; // file page size in kb.
                                    // FILE *fp = fopen(filename, "r");
-
+    file = filename;
     struct stat buffer; // buf argument is a pointer to a stat structure
     // obtain file status information for a file name. success return 0, otherwise, -1 and errno set
     int file_status = stat(filename, &buffer);
 
     cout << "file_status:  " << file_status << endl;
+    cout << "path:  " << path << endl;
 
     if (file_status == 0)
     {
@@ -50,23 +52,25 @@ unsigned short Ini::load_resurce(const std::string &path)
     else if (file_status == -1)
     {
         // perror("Error opening file");
+        close(fd);
         return EXIT_FAILURE;
     }
     if (fd < 0)
     {
         // perror("file descriptor error.");
+        close(fd);
         return READ_ERROR;
     };
 
-    cout << "fd:  " << fd << endl;
-    // For mmap we need to stretch file
-    // Get the size of the file
+    // cout << "fd:  " << fd << endl;
+    //  For mmap we need to stretch file
+    //  Get the size of the file
     off_t filesize = lseek(fd, 0, SEEK_END); // SEEK_END The file offset is set to the size of the file plus offset  bytes.
 
     // Map the file into memory
     // (starting address(If addr is NULL, then the kernel chooses the (page-aligned) address at which to create the mapping), length of the mapping, )
     // char *mmap_obj = static_cast<char *>(mmap(NULL, filesize, PROT_READ, MAP_PRIVATE, fd, 0));
-    mmap_obj = static_cast<char *>(mmap(NULL, filesize, PROT_READ, MAP_PRIVATE, fd, 0));
+    char *mmap_obj = (char *)(mmap(NULL, filesize, PROT_READ, MAP_PRIVATE, fd, 0));
     // mmap_obj = static_cast<char *>(mmap(NULL, filesize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
     if (mmap_obj == MAP_FAILED)
     {
@@ -76,7 +80,7 @@ unsigned short Ini::load_resurce(const std::string &path)
     }
 
     // Access the file content through the mmapped memory
-    cout << "File content: " << mmap_obj << endl;
+    // cout << "File content: " << mmap_obj << endl;
 
     // int end_file = filesize * sizeof(char);
 
@@ -93,8 +97,8 @@ unsigned short Ini::load_resurce(const std::string &path)
         std::string line, currentSection;
         while (std::getline(ss, line, '\n'))
         {
-            cout << " LINE: " << line << endl;
-            // Trim whitespace
+            // cout << " LINE: " << line << endl;
+            //  Trim whitespace
             line.erase(0, line.find_first_not_of(" \t"));
             line.erase(line.find_last_not_of(" \t") + 1);
             // line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
@@ -148,49 +152,39 @@ unsigned short Ini::load_resurce(const std::string &path)
                 //     value = value.substr(0, pos);
                 // }
                 data[key] = value;
-                cout << " KEY: " << key << endl;
-                cout << " VELUE: " << value << endl;
+                cout << " key: " << key << "              value: " << value << endl;
             }
+        }
+
+        if (munmap(mmap_obj, filesize) == -1) // if (munmap(mmap_obj, textsize) == -1)
+        {
+            close(fd);
+            perror("Error un-mmapping the file");
+            return GENERIC_ERROR;
+        }
+
+        if (fd)
+        {
+            close(fd);
         }
     }
 
-    for (auto i : this->data)
-        cout << "'" << i.first << "' \t\t\t'" << i.second << "'" << endl;
+    // for (auto i : this->data)
+    //     cout << "'" << i.first << "' \t\t\t'" << i.second << "'" << endl;
 
-    string word;
-    // while (ss >> word)
-    // { // Extract word from the stream.
-    //     cout << " word : " << word << endl;
-    // }
+    // string word;
+    //  while (ss >> word)
+    //  { // Extract word from the stream.
+    //      cout << " word : " << word << endl;
+    //  }
 
-    vector<string> str_vec;
-    // std::cout << "currentSessionIP  : " << currentSessionIP << std::endl;
-    // for (int i = 0; i < end_file; ++i)
+    // if (munmap(mmap_obj, filesize) == -1)
     // {
-    //     // std::cout << mmap_obj[i] << std::endl;
-
-    //     if (mmap_obj[i] != ' ') //&& mmap_obj[i] != '='
-    //     {
-    //         // Append the char to the temp string.
-    //         line.push_back(mmap_obj[i]);
-    //     }
-    //     else if (mmap_obj[i] == ' ' && line != " ")
-    //     {
-    //         std::cout << " line: " << line << std::endl;
-    //         str_vec.push_back(line);
-    //     }
+    //     close(fd);
+    //     return GENERIC_ERROR;
     // }
-
-    // for (string s : str_vec)
-    // {
-    //     std::cout << " s: " << s << std::endl;
-    // }
-    // free the mmapped memory
-    if (munmap(mmap_obj, filesize) == -1)
-    {
-        return GENERIC_ERROR;
-    }
-    close(fd);
+    // close(fd);
+    cout << "file name:" << filename << endl;
     return EXIT_SUCCESS;
 }
 
@@ -210,20 +204,35 @@ unsigned short Ini::load_resurce(const std::string &path)
 // allows an application to retrive the value of a key available in apreviously loaded INI file
 unsigned short Ini::get_value(const std::string &key, std::string &value)
 {
-    if (mmap_obj == nullptr)
+    cout << " set_value      key  :    " << key << endl;
+
+    if (data.empty())
     {
-        close(fd);
-        // perror("Error mmapping the file");
+        cout << "set_value   mmap_obj == nullptr" << endl;
+        // close(fd);
+        //  perror("Error mmapping the file");
         return FILE_NOT_LOADED; // resource file has not been loaded
     }
 
     if (data.count(key) == 0)
     {
+        cout << "data.count(key) == 0" << endl;
+        // close(fd);
         return MISSING_KEY; // missing key
     }
     else
     {
+        cout << "set_value " << endl;
         value = data.at(key);
+        cout << "value: " << value << endl;
+        // string v = data.at(key);
+        // cout << "value: " << v << endl;
+        // const char *ch = v.c_str();
+        // char *b;
+        // memcpy(b, ch, strlen(ch));
+        // value = string(b);
+        // close(fd);
+        cout << "file name:" << filename << endl;
         return EXIT_SUCCESS;
     }
 }
@@ -232,26 +241,38 @@ unsigned short Ini::get_value(const std::string &key, std::string &value)
 // This adds or replace the new key/value pair both in the volatile memory and in the ini file on the filesystem.
 unsigned short Ini::set_value(const std::string &key, std::string &value)
 {
+    cout << "set_value   key:" << key << endl;
+    cout << "set_value   value:" << value << endl;
     int result;
     size_t textsize;
     // off_t offset, pa_offset;
     // std::string key_str;
 
+    cout << "file name:" << this->filename << endl;
+    cout << "file name:" << file << endl;
+    char *filen = file.data();
+    cout << "filen:" << filen << endl;
+
     struct stat buffer; // buf argument is a pointer to a stat structure
     // obtain file status information for a file name. success return 0, otherwise, -1 and errno set
-    int file_status = stat(filename, &buffer);
+    int file_status = stat(filen, &buffer);
+    cout << "file_status:" << file_status << endl;
     if (file_status == 0)
     {
-        fd = open(filename, O_RDWR, 0644);
+        fd = open(filen, O_RDWR, 0644);
     }
-    else if (file_status == -1)
+    else if (file_status == -1) // entra qui dentro
     {
         // perror("Error opening file");
+        cout << "exit failue" << endl;
+        close(fd);
         return EXIT_FAILURE;
     }
     if (fd < 0)
     {
-        // perror("file descriptor error.");
+        cout << "fd < 0" << endl;
+        perror("file descriptor error.");
+        close(fd);
         return READ_ERROR;
     };
 
@@ -264,11 +285,13 @@ unsigned short Ini::set_value(const std::string &key, std::string &value)
 
     // we need to share the mapping (to be able to write inside the file thru the virtual address space)
     // mmap_obj = static_cast<char *>(mmap(NULL, MAX_MMAP_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0));
+    cout << "before mmap" << endl;
     mmap_obj = static_cast<char *>(mmap(NULL, filesize, PROT_READ, MAP_PRIVATE, fd, 0));
 
     if (mmap_obj == MAP_FAILED)
     {
         close(fd);
+
         perror("Error mmapping the file");
         return GENERIC_ERROR;
     }
@@ -331,6 +354,7 @@ unsigned short Ini::set_value(const std::string &key, std::string &value)
 
         if (munmap(mmap_obj, filesize) == -1)
         {
+            close(fd);
             return GENERIC_ERROR;
         }
 
@@ -396,6 +420,7 @@ unsigned short Ini::set_value(const std::string &key, std::string &value)
 
     if (munmap(mmap_obj, textsize) == -1) // if (munmap(mmap_obj, textsize) == -1)
     {
+        close(fd);
         perror("Error un-mmapping the file");
         return GENERIC_ERROR;
     }
