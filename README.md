@@ -61,7 +61,7 @@ Server bash
 
 Client bash
 ```
-./build/client --load /home/userver/evaluation_project1/example/example.ini
+./build/client --load /home/.../ .../evaluation_project1/example/example.ini
 ./build/client --get section.foo.bar
 ./build/client --set section.color.red “roses are red”
 ```
